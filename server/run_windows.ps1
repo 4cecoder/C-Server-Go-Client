@@ -24,4 +24,4 @@ New-Item -ItemType Directory -Force -Path build
 Set-Location -Path build
 cmake ..
 make
-./medi_example
+./server
