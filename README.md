@@ -3,8 +3,8 @@
 ## Server in C
 
 ## Requirements 
-sqlite3
-libmircohttpd
+- sqlite3
+- libmircohttpd
 
 ## Running the server
 
