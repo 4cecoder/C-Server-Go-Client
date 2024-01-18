@@ -1,0 +1,3 @@
+/Users/fource/bytecats/C-Server-Go-Client/server/build-windows/CMakeFiles/server.dir
+/Users/fource/bytecats/C-Server-Go-Client/server/build-windows/CMakeFiles/edit_cache.dir
+/Users/fource/bytecats/C-Server-Go-Client/server/build-windows/CMakeFiles/rebuild_cache.dir
