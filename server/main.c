@@ -1,253 +1,404 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <microhttpd.h>
 #include <sqlite3.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+#define PORT 8080
 #define BASE_URL "/api"
 
-// Define Patient structure
+
 typedef struct {
-    int id;
-    char name[100];
+  int id;
+  char name[100];
 } Patient;
 
-// Define Doctor structure
 typedef struct {
-    int id;
-    char name[100];
-    char specialty[100];
+  int id;
+  char name[100];
+  char specialty[100];
 } Doctor;
 
-// Define Appointment structure
 typedef struct {
-    int id;
-    int patient_id;
-    int doctor_id;
-    char date[100];
+  int id;
+  int patient_id;
+  int doctor_id;
+  char date[100];
 } Appointment;
 
-// Define MedicalRecord structure
 typedef struct {
-    int id;
-    int patient_id;
-    char details[255];
+  int id;
+  int patient_id;
+  char details[255];
 } MedicalRecord;
 
-static sqlite3 *db;
+sqlite3 *db;
 
-void init_db() {
-    char *err_msg = 0;
-
-    int rc = sqlite3_open("healthcare.db", &db);
-
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-        sqlite3_close(db);
-        exit(1);
-    }
-
-    // Create tables if not exists
-    const char *create_table_query =
-        "CREATE TABLE IF NOT EXISTS patients (id INTEGER PRIMARY KEY, name TEXT);"
-        "CREATE TABLE IF NOT EXISTS doctors (id INTEGER PRIMARY KEY, name TEXT, specialty TEXT);"
-        "CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY, patient_id INTEGER, doctor_id INTEGER, date TEXT);"
-        "CREATE TABLE IF NOT EXISTS medicalrecords (id INTEGER PRIMARY KEY, patient_id INTEGER, details TEXT);";
-
-    rc = sqlite3_exec(db, create_table_query, 0, 0, &err_msg);
-
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "SQL error: %s\n", err_msg);
-        sqlite3_free(err_msg);
-    }
+int init_db() {
+    // Database initialization code...
+    return 0; // Return 0 if successful
 }
 
-// Function to set ID field for different entity types
-void set_id_field(void *entity, int id) {
-    if (entity != NULL) {
-        *((int *)entity) = id;
-    }
+// Patient CRUD operations
+int create_patient(Patient *patient) {
+  char *sql = "INSERT INTO Patients (id, name) VALUES (?, ?)";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, patient->id);
+  sqlite3_bind_text(stmt, 2, patient->name, -1, SQLITE_STATIC);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
 }
 
-// Generic function to handle GET requests for all entities
-static int get_entities_handler(void *cls, struct MHD_Connection *connection, const char *url, const char *method, const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls) {
-    char entity_type[50];
-    sscanf(url, BASE_URL "/%s", entity_type);
+int read_patient(int id, Patient *patient) {
+  char *sql = "SELECT id, name FROM Patients WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    patient->id = sqlite3_column_int(stmt, 0);
+    strcpy(patient->name, (char *)sqlite3_column_text(stmt, 1));
+  }
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-    // Retrieve a list of all entities
-    sqlite3_stmt *stmt;
-    const char *query = NULL;
-    int rc = 0;
+int update_patient(const Patient *patient) {
+  char *sql = "UPDATE Patients SET name = ? WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_text(stmt, 1, patient->name, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 2, patient->id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-    if (strcmp(entity_type, "patients") == 0) {
-        query = "SELECT * FROM patients;";
-    } else if (strcmp(entity_type, "doctors") == 0) {
-        query = "SELECT * FROM doctors;";
-    } else if (strcmp(entity_type, "appointments") == 0) {
-        query = "SELECT * FROM appointments;";
-    } else if (strcmp(entity_type, "medicalrecords") == 0) {
-        query = "SELECT * FROM medicalrecords;";
-    }
+int delete_patient(int id) {
+  char *sql = "DELETE FROM Patients WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-    if (query != NULL) {
-        rc = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
 
-        if (rc == SQLITE_OK) {
-            printf("%s:\n", entity_type);
-            printf("ID\tName\n");
+// Doctor CRUD operations
+int create_doctor(Doctor *doctor) {
+  char *sql = "INSERT INTO Doctors (id, name, specialty) VALUES (?, ?, ?)";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, doctor->id);
+  sqlite3_bind_text(stmt, 2, doctor->name, -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, doctor->specialty, -1, SQLITE_STATIC);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-            while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-                int id = sqlite3_column_int(stmt, 0);
-                const char *name = sqlite3_column_text(stmt, 1);
+int read_doctor(int id, Doctor *doctor) {
+  char *sql = "SELECT id, name, specialty FROM Doctors WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    doctor->id = sqlite3_column_int(stmt, 0);
+    strcpy(doctor->name, (char *)sqlite3_column_text(stmt, 1));
+    strcpy(doctor->specialty, (char *)sqlite3_column_text(stmt, 2));
+  }
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-                printf("%d\t%s\n", id, name);
-            }
+int update_doctor(const Doctor *doctor) {
+  char *sql = "UPDATE Doctors SET name = ?, specialty = ? WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_text(stmt, 1, doctor->name, -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, doctor->specialty, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 3, doctor->id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-            sqlite3_finalize(stmt);
-        } else {
-            fprintf(stderr, "Failed to execute query: %s\n", sqlite3_errmsg(db));
-        }
-    }
+int delete_doctor(int id) {
+  char *sql = "DELETE FROM Doctors WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-    const char *page = "<html><body>Hello, this is a simple REST API server.</body></html>";
-    struct MHD_Response *response;
-    int ret;
+// Appointment CRUD operations
+int create_appointment(Appointment *appointment) {
+  char *sql = "INSERT INTO Appointments (id, patient_id, doctor_id, date) VALUES (?, ?, ?, ?)";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, appointment->id);
+  sqlite3_bind_int(stmt, 2, appointment->patient_id);
+  sqlite3_bind_int(stmt, 3, appointment->doctor_id);
+  sqlite3_bind_text(stmt, 4, appointment->date, -1, SQLITE_STATIC);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
 
-    response = MHD_create_response_from_buffer(strlen(page), (void *)page, MHD_RESPMEM_PERSISTENT);
+int read_appointment(int id, Appointment *appointment) {
+  char *sql = "SELECT id, patient_id, doctor_id, date FROM Appointments WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    appointment->id = sqlite3_column_int(stmt, 0);
+    appointment->patient_id = sqlite3_column_int(stmt, 1);
+    appointment->doctor_id = sqlite3_column_int(stmt, 2);
+    strcpy(appointment->date, (char *)sqlite3_column_text(stmt, 3));
+  }
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int update_appointment(const Appointment *appointment) {
+  char *sql = "UPDATE Appointments SET patient_id = ?, doctor_id = ?, date = ? WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, appointment->patient_id);
+  sqlite3_bind_int(stmt, 2, appointment->doctor_id);
+  sqlite3_bind_text(stmt, 3, appointment->date, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 4, appointment->id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int delete_appointment(int id) {
+  char *sql = "DELETE FROM Appointments WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+// MedicalRecord CRUD operations
+int create_medical_record(MedicalRecord *medical_record) {
+  char *sql = "INSERT INTO MedicalRecords (id, patient_id, details) VALUES (?, ?, ?)";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, medical_record->id);
+  sqlite3_bind_int(stmt, 2, medical_record->patient_id);
+  sqlite3_bind_text(stmt, 3, medical_record->details, -1, SQLITE_STATIC);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int read_medical_record(int id, MedicalRecord *medical_record) {
+  char *sql = "SELECT id, patient_id, details FROM MedicalRecords WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    medical_record->id = sqlite3_column_int(stmt, 0);
+    medical_record->patient_id = sqlite3_column_int(stmt, 1);
+    strcpy(medical_record->details, (char *)sqlite3_column_text(stmt, 2));
+  }
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int update_medical_record(const MedicalRecord *medical_record) {
+  char *sql = "UPDATE MedicalRecords SET patient_id = ?, details = ? WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, medical_record->patient_id);
+  sqlite3_bind_text(stmt, 2, medical_record->details, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 3, medical_record->id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int delete_medical_record(int id) {
+  char *sql = "DELETE FROM MedicalRecords WHERE id = ?";
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  sqlite3_bind_int(stmt, 1, id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int request_handler(void *cls, struct MHD_Connection *connection, const char *url, const char *method, const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls)
+{
+  const char *response_page;
+  struct MHD_Response *response;
+  int ret;
+
+  if (strcmp(url, BASE_URL) == 0 || strcmp(url, BASE_URL "/") == 0) {
+    // Handle GET /api
+   response_page =
+    "<html>"
+    "<head>"
+    "<style>"
+    "  body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }"
+    "  h1, h2 { color: #5a5a5a; }"
+    "  ul { list-style-type: none; padding: 0; }"
+    "  li { margin: 10px 0; }"
+    "  .container { max-width: 700px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }"
+    "</style>"
+    "</head>"
+    "<body>"
+    "<div class='container'>"
+    "<h1>Healthcare System API Documentation</h1>"
+    "<h2>Available Endpoints:</h2>"
+    "<ul>"
+    "<li>GET /api/patients - Retrieves all patients</li>"
+    "<li>GET /api/patients/(patientID) - Retrieves a specific patient</li>"
+    "<li>POST /api/patients - Creates a new patient</li>"
+    "<li>PUT /api/patients/(patientID) - Updates a specific patient</li>"
+    "<li>DELETE /api/patients/(patientID) - Deletes a specific patient</li>"
+    "<li>GET /api/doctors - Retrieves all doctors</li>"
+    "<li>GET /api/doctors/(doctorID) - Retrieves a specific doctor</li>"
+    "<li>POST /api/doctors - Creates a new doctor</li>"
+    "<li>PUT /api/doctors/(doctorID) - Updates a specific doctor</li>"
+    "<li>DELETE /api/doctors/(doctorID) - Deletes a specific doctor</li>"
+    "<li>GET /api/appointments - Retrieves all appointments</li>"
+    "<li>GET /api/appointments/(appointmentID) - Retrieves a specific appointment</li>"
+    "<li>POST /api/appointments - Creates a new appointment</li>"
+    "<li>PUT /api/appointments/(appointmentID) - Updates a specific appointment</li>"
+    "<li>DELETE /api/appointments/(appointmentID) - Deletes a specific appointment</li>"
+    "<li>GET /api/medicalrecords - Retrieves all medical records</li>"
+    "<li>GET /api/medicalrecords/(medicalRecordID) - Retrieves a specific medical record</li>"
+    "<li>POST /api/medicalrecords - Creates a new medical record</li>"
+    "<li>PUT /api/medicalrecords/(medicalRecordID) - Updates a specific medical record</li>"
+    "<li>DELETE /api/medicalrecords/(medicalRecordID) - Deletes a specific medical record</li>"
+    "</ul>"
+    "</div>"
+    "</body>"
+    "</html>";
+
+    response = MHD_create_response_from_buffer(strlen(response_page), (void *)response_page, MHD_RESPMEM_PERSISTENT);
     ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
-
     return ret;
-}
+  }
+     if (strncmp(url, BASE_URL "/patients", strlen(BASE_URL "/patients")) == 0) {
+      const char *endpoint = url + strlen(BASE_URL "/patients");
 
-// Generic function to handle GET requests for a specific entity by ID
-static int get_entity_by_id_handler(void *cls, struct MHD_Connection *connection, const char *url, const char *method, const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls) {
-    char entity_type[50];
-    int entity_id;
-    sscanf(url, BASE_URL "/%s/%d", entity_type, &entity_id);
+      if (strcmp(method, "GET") == 0 && strlen(endpoint) == 0) {
+        // Handle GET /patients
+        response_page = "<html><body>GET /patients Request Processed</body></html>";
+      } else if (strcmp(method, "GET") == 0) {
+        // Handle GET /patients/(patientID)
+        response_page = "<html><body>GET /patients/(patientID) Request Processed</body></html>";
+      } else if (strcmp(method, "POST") == 0 && strlen(endpoint) == 0) {
+        // Handle POST /patients
+        response_page = "<html><body>POST /patients Request Processed</body></html>";
+      } else if (strcmp(method, "PUT") == 0) {
+        // Handle PUT /patients/(patientID)
+        response_page = "<html><body>PUT /patients/(patientID) Request Processed</body></html>";
+      } else if (strcmp(method, "DELETE") == 0) {
+        // Handle DELETE /patients/(patientID)
+        response_page = "<html><body>DELETE /patients/(patientID) Request Processed</body></html>";
+      } else {
+        response_page = "<html><body>Invalid Request</body></html>";
+      }
+    } else if (strncmp(url, BASE_URL "/doctors", strlen(BASE_URL "/doctors")) == 0) {
+      const char *endpoint = url + strlen(BASE_URL "/doctors");
 
-    // Retrieve details of a specific entity
-    sqlite3_stmt *stmt;
-    const char *query = NULL;
-    int rc = 0;
+      if (strcmp(method, "GET") == 0 && strlen(endpoint) == 0) {
+        // Handle GET /doctors
+        response_page = "<html><body>GET /doctors Request Processed</body></html>";
+      } else if (strcmp(method, "GET") == 0) {
+        // Handle GET /doctors/(doctorID)
+        response_page = "<html><body>GET /doctors/(doctorID) Request Processed</body></html>";
+      } else if (strcmp(method, "POST") == 0 && strlen(endpoint) == 0) {
+        // Handle POST /doctors
+        response_page = "<html><body>POST /doctors Request Processed</body></html>";
+      } else if (strcmp(method, "PUT") == 0) {
+        // Handle PUT /doctors/(doctorID)
+        response_page = "<html><body>PUT /doctors/(doctorID) Request Processed</body></html>";
+      } else if (strcmp(method, "DELETE") == 0) {
+        // Handle DELETE /doctors/(doctorID)
+        response_page = "<html><body>DELETE /doctors/(doctorID) Request Processed</body></html>";
+      } else {
+        response_page = "<html><body>Invalid Request</body></html>";
+      }
+    } else if (strncmp(url, BASE_URL "/appointments", strlen(BASE_URL "/appointments")) == 0) {
+      const char *endpoint = url + strlen(BASE_URL "/appointments");
 
-    if (strcmp(entity_type, "patients") == 0) {
-        query = "SELECT * FROM patients WHERE id = ?;";
-    } else if (strcmp(entity_type, "doctors") == 0) {
-        query = "SELECT * FROM doctors WHERE id = ?;";
-    } else if (strcmp(entity_type, "appointments") == 0) {
-        query = "SELECT * FROM appointments WHERE id = ?;";
-    } else if (strcmp(entity_type, "medicalrecords") == 0) {
-        query = "SELECT * FROM medicalrecords WHERE id = ?;";
+      if (strcmp(method, "GET") == 0 && strlen(endpoint) == 0) {
+        // Handle GET /appointments
+        response_page = "<html><body>GET /appointments Request Processed</body></html>";
+      } else if (strcmp(method, "GET") == 0) {
+        // Handle GET /appointments/(appointmentID)
+        response_page = "<html><body>GET /appointments/(appointmentID) Request Processed</body></html>";
+      } else if (strcmp(method, "POST") == 0 && strlen(endpoint) == 0) {
+        // Handle POST /appointments
+        response_page = "<html><body>POST /appointments Request Processed</body></html>";
+      } else if (strcmp(method, "PUT") == 0) {
+        // Handle PUT /appointments/(appointmentID)
+        response_page = "<html><body>PUT /appointments/(appointmentID) Request Processed</body></html>";
+      } else if (strcmp(method, "DELETE") == 0) {
+        // Handle DELETE /appointments/(appointmentID)
+        response_page = "<html><body>DELETE /appointments/(appointmentID) Request Processed</body></html>";
+      } else {
+        response_page = "<html><body>Invalid Request</body></html>";
+      }
+    } else if (strncmp(url, BASE_URL "/medicalrecords", strlen(BASE_URL "/medicalrecords")) == 0) {
+      const char *endpoint = url + strlen(BASE_URL "/medicalrecords");
+      if (strcmp(method, "GET") == 0 && strlen(endpoint) == 0) {
+        // Handle GET /medicalrecords
+        response_page = "<html><body>GET /medicalrecords Request Processed</body></html>";
+      } else if (strcmp(method, "GET") == 0) {
+        // Handle GET /medicalrecords/(medicalRecordID)
+        response_page = "<html><body>GET /medicalrecords/(medicalRecordID) Request Processed</body></html>";
+      } else if (strcmp(method, "POST") == 0 && strlen(endpoint) == 0) {
+        // Handle POST /medicalrecords
+        response_page = "<html><body>POST /medicalrecords Request Processed</body></html>";
+      } else if (strcmp(method, "PUT") == 0) {
+        // Handle PUT /medicalrecords/(medicalRecordID)
+        response_page = "<html><body>PUT /medicalrecords/(medicalRecordID) Request Processed</body></html>";
+      } else if (strcmp(method, "DELETE") == 0) {
+        // Handle DELETE /medicalrecords/(medicalRecordID)
+        response_page = "<html><body>DELETE /medicalrecords/(medicalRecordID) Request Processed</body></html>";
+      } else {
+        response_page = "<html><body>Invalid Request</body></html>";
+      }
+    } else {
+      // Handle non-API requests or send a 404 Not Found response
+      response_page = "<html><body>404 Not Found</body></html>";
     }
 
-    if (query != NULL) {
-        rc = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
-
-        if (rc == SQLITE_OK) {
-            sqlite3_bind_int(stmt, 1, entity_id);
-
-            while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-                printf("%s Details:\n", entity_type);
-                printf("ID\tName\n");
-                printf("%d\t%s\n", sqlite3_column_int(stmt, 0), sqlite3_column_text(stmt, 1));
-            }
-
-            sqlite3_finalize(stmt);
-        } else {
-            fprintf(stderr, "Failed to execute query: %s\n", sqlite3_errmsg(db));
-        }
-    }
-
-    const char *page = "<html><body>Hello, this is a simple REST API server.</body></html>";
-    struct MHD_Response *response;
-    int ret;
-
-    response = MHD_create_response_from_buffer(strlen(page), (void *)page, MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    response = MHD_create_response_from_buffer(strlen(response_page), (void *)response_page, MHD_RESPMEM_PERSISTENT);
+    MHD_queue_response(connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
-
-    return ret;
-}
-
-// Generic function to handle POST requests for creating a new entity
-static int create_entity_handler(void *cls, struct MHD_Connection *connection, const char *url, const char *method, const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls) {
-    char entity_type[50];
-    sscanf(url, BASE_URL "/%s", entity_type);
-
-    // Create a new entity
-    sqlite3_stmt *stmt;
-    const char *query = NULL;
-    int rc = 0;
-
-    if (strcmp(entity_type, "patients") == 0) {
-        query = "INSERT INTO patients (name) VALUES (?);";
-    } else if (strcmp(entity_type, "doctors") == 0) {
-        query = "INSERT INTO doctors (name, specialty) VALUES (?, ?);";
-    } else if (strcmp(entity_type, "appointments") == 0) {
-        query = "INSERT INTO appointments (patient_id, doctor_id, date) VALUES (?, ?, ?);";
-    } else if (strcmp(entity_type, "medicalrecords") == 0) {
-        query = "INSERT INTO medicalrecords (patient_id, details) VALUES (?, ?);";
-    }
-
-    if (query != NULL) {
-        rc = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
-
-        if (rc == SQLITE_OK) {
-            if (*upload_data_size > 0) {
-                // Assuming the request body is in JSON format with necessary fields
-                const char *json_data = upload_data;
-                sqlite3_bind_text(stmt, 1, json_data, -1, SQLITE_STATIC);
-
-                rc = sqlite3_step(stmt);
-                if (rc != SQLITE_DONE) {
-                    fprintf(stderr, "Failed to execute query: %s\n", sqlite3_errmsg(db));
-                }
-            }
-
-            sqlite3_finalize(stmt);
-        } else {
-            fprintf(stderr, "Failed to execute query: %s\n", sqlite3_errmsg(db));
-        }
-    }
-
-    const char *page = "<html><body>Hello, this is a simple REST API server.</body></html>";
-    struct MHD_Response *response;
-    int ret;
-
-    response = MHD_create_response_from_buffer(strlen(page), (void *)page, MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-    MHD_destroy_response(response);
-
-    return ret;
-}
+    return MHD_YES;
+  }
 
 int main() {
-    init_db();
+   if (init_db() != 0) {
+     return 1;
+   }
 
-    struct MHD_Daemon *daemon;
+   struct MHD_Daemon *daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL, &request_handler, NULL, MHD_OPTION_END);
+   if (daemon == NULL) {
+     sqlite3_close(db);
+     return 1;
+   }
 
-    daemon = MHD_start_daemon(
-        MHD_USE_SELECT_INTERNALLY | MHD_USE_DEBUG,
-        8080,
-        NULL,
-        NULL,
-        &get_entities_handler,
-        NULL,
-        MHD_OPTION_END
-    );
+   printf("Server running on port %d\n", PORT);
+   getchar();
 
-    if (NULL == daemon) {
-        fprintf(stderr, "Failed to start the REST API server\n");
-        return 1;
-    }
-
-    printf("REST API server is running on http://localhost:8080%s\n", BASE_URL);
-    getchar(); // Press Enter to stop the server
-
-    MHD_stop_daemon(daemon);
-
-    sqlite3_close(db); // Close the database connection
-
-    return 0;
-}
+   MHD_stop_daemon(daemon);
+   sqlite3_close(db);
+   return 0;
+ }
