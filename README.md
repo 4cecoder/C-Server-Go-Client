@@ -2,6 +2,16 @@
 
 ## Server in C
 
+## Requirements 
+sqlite3
+libmircohttpd
+
+## Running the server
+
+There's a ps1 file for windows
+
+Theres a sh file for linux to run a build based on the cmake
+
 
 ## Endpoint Curl Usage:
 ### Get all patients
