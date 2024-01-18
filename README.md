@@ -19,3 +19,16 @@
 
 
 # Client in Go
+Install golang 
+
+Go into the client folder
+
+`cd client`
+
+Run client 
+`go run main.go`
+
+Go to http://localhost:8081/ in the browser
+
+
+
