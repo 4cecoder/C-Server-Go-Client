@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
-project(medi_example C)
+project(server C)
 
 set(CMAKE_C_STANDARD 23)
 
@@ -24,8 +24,8 @@ elseif(UNIX AND NOT APPLE)
     # Linux specific settings...
 endif()
 
-add_executable(medi_example main.c)
+add_executable(server main.c)
 
 # Link the libraries to your executable
-target_include_directories(medi_example PRIVATE ${MICROHTTPD_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS})
-target_link_libraries(medi_example ${MICROHTTPD_LIBRARIES} ${SQLITE3_LIBRARIES})
+target_include_directories(server PRIVATE ${MICROHTTPD_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS})
+target_link_libraries(server ${MICROHTTPD_LIBRARIES} ${SQLITE3_LIBRARIES})
