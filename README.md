@@ -6,6 +6,9 @@
 - sqlite3
 - libmircohttpd
 - jansson
+- gnutls
+- libcurl-gnutls
+- zlib
 - ulfius
 
 ## Running the server
