@@ -1,16 +1,19 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "index.html")
-	})
+	// Serve static files, e.g., HTML, JS, CSS
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/", fs)
 
-	fmt.Println("Server starting on :8081...")
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	// Start HTTP server on port 8081
+	log.Println("Listening on http://localhost:8081/")
+	err := http.ListenAndServe(":8081", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

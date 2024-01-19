@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Interaction</title>
+    <!-- Add Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container">
+    <h1 class="my-4">Interacting with API</h1>
+
+    <!-- Patients Section -->
+    <h3>Patients</h3>
+    <button class="btn btn-primary mb-3" onclick="fetchAllPatients()">Fetch All Patients</button>
+    <!-- Form to add a new patient -->
+    <div class="form-group">
+        <label for="patientName">Patient Name:</label>
+        <input type="text" class="form-control" id="patientName" required>
+    </div>
+    <button class="btn btn-success mb-3" onclick="createPatient()">Add Patient</button>
+    <button class="btn btn-warning mb-3" onclick="updatePatient()">Update Patient</button>
+    <button class="btn btn-danger mb-3" onclick="deletePatient()">Delete Patient</button>
+
+    <!-- Doctors Section -->
+    <h3>Doctors</h3>
+    <button class="btn btn-primary mb-3" onclick="fetchAllDoctors()">Fetch All Doctors</button>
+    <!-- Form to add a new doctor -->
+    <div class="form-group">
+        <label for="doctorName">Doctor Name:</label>
+        <input type="text" class="form-control" id="doctorName" required>
+    </div>
+    <div class="form-group">
+        <label for="doctorSpecialty">Doctor Specialty:</label>
+        <input type="text" class="form-control" id="doctorSpecialty" required>
+    </div>
+    <button class="btn btn-success mb-3" onclick="createDoctor()">Add Doctor</button>
+    <button class="btn btn-warning mb-3" onclick="updateDoctor()">Update Doctor</button>
+    <button class="btn btn-danger mb-3" onclick="deleteDoctor()">Delete Doctor</button>
+
+    <!-- Appointments Section -->
+    <h3>Appointments</h3>
+    <button class="btn btn-primary mb-3" onclick="fetchAllAppointments()">Fetch All Appointments</button>
+    <!-- Form to add a new appointment -->
+    <div class="form-group">
+        <label for="appointmentPatientID">Patient ID:</label>
+        <input type="number" class="form-control" id="appointmentPatientID" required>
+    </div>
+    <div class="form-group">
+        <label for="appointmentDoctorID">Doctor ID:</label>
+        <input type="number" class="form-control" id="appointmentDoctorID" required>
+    </div>
+    <div class="form-group">
+        <label for="appointmentDate">Appointment Date:</label>
+        <input type="date" class="form-control" id="appointmentDate" required>
+    </div>
+    <button class="btn btn-success mb-3" onclick="createAppointment()">Add Appointment</button>
+    <button class="btn btn-warning mb-3" onclick="updateAppointment()">Update Appointment</button>
+    <button class="btn btn-danger mb-3" onclick="deleteAppointment()">Delete Appointment</button>
+
+    <!-- Medical Records Section -->
+    <h3>Medical Records</h3>
+    <button class="btn btn-primary mb-3" onclick="fetchAllMedicalRecords()">Fetch All Medical Records</button>
+    <!-- Form to add a new medical record -->
+    <div class="form-group">
+        <label for="medicalRecordPatientID">Patient ID:</label>
+        <input type="number" class="form-control" id="medicalRecordPatientID" required>
+    </div>
+    <div class="form-group">
+        <label for="medicalRecordDetails">Medical Record Details:</label>
+        <textarea class="form-control" id="medicalRecordDetails" required></textarea>
+    </div>
+    <button class="btn btn-success mb-3" onclick="createMedicalRecord()">Add Medical Record</button>
+    <button class="btn btn-warning mb-3" onclick="updateMedicalRecord()">Update Medical Record</button>
+    <button class="btn btn-danger mb-3" onclick="deleteMedicalRecord()">Delete Medical Record</button>
+
+    <div id="output"></div>
+
+<script>
+    // Base URL of the API
+    const baseUrl = 'http://localhost:8080/api';
+
+    // Function to make a generic API request
+    async function makeApiRequest(endpoint, method, data = null) {
+        const options = {
+            method: method,
+            headers: data ? { 'Content-Type': 'application/json' } : {},
+            body: data ? JSON.stringify(data) : null
+        };
+        try {
+            const response = await fetch(`${baseUrl}/${endpoint}`, options);
+            return response.json();
+        } catch (error) {
+            console.error('Error:', error);
+            return null;
+        }
+    }
+
+    // Patients
+    async function fetchAllPatients() {
+        const data = await makeApiRequest('patients', 'GET');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function createPatient() {
+        const patientName = document.getElementById('patientName').value;
+        const patientData = { name: patientName };
+        const data = await makeApiRequest('patients', 'POST', patientData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function updatePatient(patientID, patientData) {
+        const data = await makeApiRequest(`patients/${patientID}`, 'PUT', patientData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function deletePatient(patientID) {
+        const data = await makeApiRequest(`patients/${patientID}`, 'DELETE');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+
+    // Doctors
+    async function fetchAllDoctors() {
+        const data = await makeApiRequest('doctors', 'GET');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function createDoctor() {
+        const doctorName = document.getElementById('doctorName').value;
+        const doctorSpecialty = document.getElementById('doctorSpecialty').value;
+        const doctorData = { name: doctorName, specialty: doctorSpecialty };
+        const data = await makeApiRequest('doctors', 'POST', doctorData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function updateDoctor(doctorID, doctorData) {
+        const data = await makeApiRequest(`doctors/${doctorID}`, 'PUT', doctorData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function deleteDoctor(doctorID) {
+        const data = await makeApiRequest(`doctors/${doctorID}`, 'DELETE');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+
+    // Appointments
+    async function fetchAllAppointments() {
+        const data = await makeApiRequest('appointments', 'GET');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function createAppointment() {
+        const patientID = document.getElementById('appointmentPatientID').value;
+        const doctorID = document.getElementById('appointmentDoctorID').value;
+        const date = document.getElementById('appointmentDate').value;
+        const appointmentData = { patient_id: patientID, doctor_id: doctorID, date: date };
+        const data = await makeApiRequest('appointments', 'POST', appointmentData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function updateAppointment(appointmentID, appointmentData) {
+        const data = await makeApiRequest(`appointments/${appointmentID}`, 'PUT', appointmentData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function deleteAppointment(appointmentID) {
+        const data = await makeApiRequest(`appointments/${appointmentID}`, 'DELETE');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+
+    // Medical Records
+    async function fetchAllMedicalRecords() {
+        const data = await makeApiRequest('medicalrecords', 'GET');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function createMedicalRecord() {
+        const patientID = document.getElementById('medicalRecordPatientID').value;
+        const details = document.getElementById('medicalRecordDetails').value;
+        const medicalRecordData = { patient_id: patientID, details: details };
+        const data = await makeApiRequest('medicalrecords', 'POST', medicalRecordData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function updateMedicalRecord(medicalRecordID, medicalRecordData) {
+        const data = await makeApiRequest(`medicalrecords/${medicalRecordID}`, 'PUT', medicalRecordData);
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+    async function deleteMedicalRecord(medicalRecordID) {
+        const data = await makeApiRequest(`medicalrecords/${medicalRecordID}`, 'DELETE');
+        document.getElementById('output').innerHTML = JSON.stringify(data);
+    }
+</script>
+
+
+</body>
+</html>
