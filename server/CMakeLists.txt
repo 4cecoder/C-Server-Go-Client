@@ -3,29 +3,35 @@ project(server C)
 
 set(CMAKE_C_STANDARD 23)
 
-# Find the packages for microhttpd and sqlite3
+# Find the packages for sqlite3
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(MICROHTTPD REQUIRED libmicrohttpd)
 pkg_check_modules(SQLITE3 REQUIRED sqlite3)
+pkg_check_modules(MHD REQUIRED libmicrohttpd)
 
-# Set the library path based on the operating system
-if(APPLE)
-    link_directories(/opt/homebrew/Cellar/libmicrohttpd/0.9.77/lib)
-elseif(WIN32)
-    # Assuming the binaries are in a subdirectory relative to the project root
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        # 64-bit specific path
-        link_directories(${CMAKE_SOURCE_DIR}/libmicrohttpd-0.9.77-w32-bin/x86_64/lib)
-    else()
-        # 32-bit specific path
-        link_directories(${CMAKE_SOURCE_DIR}/libmicrohttpd-0.9.77-w32-bin/x86/lib)
-    endif()
-elseif(UNIX AND NOT APPLE)
-    # Linux specific settings...
+if(WIN32)
+    # Specify paths for Windows SQLite3, if not in standard locations
+    include_directories(${PROJECT_SOURCE_DIR}/libs/windows/sqlite3)
+    link_directories(${PROJECT_SOURCE_DIR}/libs/windows/sqlite3)
+elseif(APPLE)
+    # Specify the paths for macOS Homebrew installation of Ulfius and its dependencies
+    include_directories(/opt/homebrew/include)
+    link_directories(/opt/homebrew/lib)
 endif()
 
 add_executable(server main.c)
 
 # Link the libraries to your executable
-target_include_directories(server PRIVATE ${MICROHTTPD_INCLUDE_DIRS} ${SQLITE3_INCLUDE_DIRS})
-target_link_libraries(server ${MICROHTTPD_LIBRARIES} ${SQLITE3_LIBRARIES})
+target_include_directories(server PRIVATE ${SQLITE3_INCLUDE_DIRS})
+target_link_libraries(server ${SQLITE3_LIBRARIES})
+target_include_directories(server PRIVATE ${MHD_INCLUDE_DIRS})
+target_link_libraries(server ${MHD_LIBRARIES})
+
+# Link Ulfius and its dependencies
+if(APPLE)
+    target_link_libraries(server ulfius gnutls jansson)
+endif()
+
+# For Windows, if additional libraries are needed, specify them here
+if(WIN32)
+    # Link additional Windows-specific libraries if necessary
+endif()

@@ -1,8 +1,8 @@
-#include <microhttpd.h>
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ulfius.h>
 
 #define PORT 8080
 #define BASE_URL "/api"
@@ -35,55 +35,105 @@ typedef struct {
 sqlite3 *db;
 
 int init_db() {
-    // Database initialization code...
-    return 0; // Return 0 if successful
+  const char* db_path = "health.db";
+  int rc = sqlite3_open(db_path, &db);
+
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    return 1; // Non-zero return value indicates failure
+  }
+
+  // Example SQL to create tables (if they don't exist)
+  const char *sql =
+      "CREATE TABLE IF NOT EXISTS Patients ("
+      "  id INTEGER PRIMARY KEY AUTOINCREMENT, "
+      "  name TEXT NOT NULL"
+      "); "
+      "CREATE TABLE IF NOT EXISTS Doctors ("
+      "  id INTEGER PRIMARY KEY AUTOINCREMENT, "
+      "  name TEXT NOT NULL, "
+      "  specialty TEXT NOT NULL"
+      "); "
+      "CREATE TABLE IF NOT EXISTS Appointments ("
+      "  id INTEGER PRIMARY KEY AUTOINCREMENT, "
+      "  patient_id INTEGER NOT NULL, "
+      "  doctor_id INTEGER NOT NULL, "
+      "  date TEXT NOT NULL, "
+      "  FOREIGN KEY(patient_id) REFERENCES Patients(id), "
+      "  FOREIGN KEY(doctor_id) REFERENCES Doctors(id)"
+      "); "
+      "CREATE TABLE IF NOT EXISTS MedicalRecords ("
+      "  id INTEGER PRIMARY KEY AUTOINCREMENT, "
+      "  patient_id INTEGER NOT NULL, "
+      "  details TEXT NOT NULL, "
+      "  FOREIGN KEY(patient_id) REFERENCES Patients(id)"
+      ");";
+
+
+  char *err_msg = NULL;
+  rc = sqlite3_exec(db, sql, 0, 0, &err_msg);
+
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQL error: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    sqlite3_close(db);
+    return 1; // Failure
+  }
+
+  return 0; // Success
 }
 
-// Patient CRUD operations
+
+// Create a new patient
 int create_patient(Patient *patient) {
-  char *sql = "INSERT INTO Patients (id, name) VALUES (?, ?)";
+  char *sql = "INSERT INTO Patients (name) VALUES (?)";
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-  sqlite3_bind_int(stmt, 1, patient->id);
-  sqlite3_bind_text(stmt, 2, patient->name, -1, SQLITE_STATIC);
-  sqlite3_step(stmt);
+  sqlite3_bind_text(stmt, 1, patient->name, -1, SQLITE_STATIC);
+  int rc = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  return 0;
+  return rc == SQLITE_DONE ? 0 : 1;
 }
 
+// Read a patient's details by ID
 int read_patient(int id, Patient *patient) {
   char *sql = "SELECT id, name FROM Patients WHERE id = ?";
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
   sqlite3_bind_int(stmt, 1, id);
-  if (sqlite3_step(stmt) == SQLITE_ROW) {
+  int rc = sqlite3_step(stmt);
+  if (rc == SQLITE_ROW) {
     patient->id = sqlite3_column_int(stmt, 0);
     strcpy(patient->name, (char *)sqlite3_column_text(stmt, 1));
   }
   sqlite3_finalize(stmt);
-  return 0;
+  return rc == SQLITE_ROW ? 0 : 1;
 }
 
+// Update a patient's details
 int update_patient(const Patient *patient) {
   char *sql = "UPDATE Patients SET name = ? WHERE id = ?";
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
   sqlite3_bind_text(stmt, 1, patient->name, -1, SQLITE_STATIC);
   sqlite3_bind_int(stmt, 2, patient->id);
-  sqlite3_step(stmt);
+  int rc = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  return 0;
+  return rc == SQLITE_DONE ? 0 : 1;
 }
 
+// Delete a patient by ID
 int delete_patient(int id) {
   char *sql = "DELETE FROM Patients WHERE id = ?";
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
   sqlite3_bind_int(stmt, 1, id);
-  sqlite3_step(stmt);
+  int rc = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  return 0;
+  return rc == SQLITE_DONE ? 0 : 1;
 }
+
 
 
 // Doctor CRUD operations
@@ -378,27 +428,441 @@ int request_handler(void *cls, struct MHD_Connection *connection, const char *ur
       response_page = "<html><body>404 Not Found</body></html>";
     }
 
+    // Add CORS headers
+    MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+    MHD_add_response_header(response, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    MHD_add_response_header(response, "Access-Control-Allow-Headers", "Content-Type");
+
     response = MHD_create_response_from_buffer(strlen(response_page), (void *)response_page, MHD_RESPMEM_PERSISTENT);
     MHD_queue_response(connection, MHD_HTTP_OK, response);
     MHD_destroy_response(response);
     return MHD_YES;
   }
 
+// Patients CRUD Callback Functions
+
+int callback_patients_get(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+  Patient patient;
+  int result = read_patient(id, &patient);
+
+  if (result == 0) { // Patient found
+    json_t *json_response = json_pack("{sisi}", "id", patient.id, "name", patient.name);
+    ulfius_set_json_body_response(response, 200, json_response);
+    json_decref(json_response);
+  } else {
+    ulfius_set_string_body_response(response, 404, "Patient not found");
+  }
+
+  return U_CALLBACK_CONTINUE;
+}
+
+
+int callback_patients_post(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  json_t *json_request = ulfius_get_json_body_request(request, NULL);
+  const char *name = json_string_value(json_object_get(json_request, "name"));
+  if (name) {
+    Patient new_patient = { .id = 0, .name = "" };
+    strncpy(new_patient.name, name, sizeof(new_patient.name) - 1);
+    int result = create_patient(&new_patient);
+
+    if (result == 0) {
+      ulfius_set_string_body_response(response, 201, "Patient created");
+    } else {
+      ulfius_set_string_body_response(response, 500, "Error creating patient");
+    }
+  } else {
+    ulfius_set_string_body_response(response, 400, "Invalid data");
+  }
+
+  if (json_request) {
+    json_decref(json_request);
+  }
+
+  return U_CALLBACK_CONTINUE;
+}
+
+
+int callback_patients_put(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  json_t *json_request = ulfius_get_json_body_request(request, NULL);
+  int id = json_integer_value(json_object_get(json_request, "id"));
+  const char *name = json_string_value(json_object_get(json_request, "name"));
+
+  if (id > 0 && name) {
+    Patient patient = { .id = id, .name = "" };
+    strncpy(patient.name, name, sizeof(patient.name) - 1);
+    int result = update_patient(&patient);
+
+    if (result == 0) {
+      ulfius_set_string_body_response(response, 200, "Patient updated");
+    } else {
+      ulfius_set_string_body_response(response, 500, "Error updating patient");
+    }
+  } else {
+    ulfius_set_string_body_response(response, 400, "Invalid data");
+  }
+
+  if (json_request) {
+    json_decref(json_request);
+  }
+
+  return U_CALLBACK_CONTINUE;
+}
+
+
+int callback_patients_delete(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+
+  if (id > 0) {
+    int result = delete_patient(id);
+    if (result == 0) {
+      ulfius_set_string_body_response(response, 200, "Patient deleted");
+    } else {
+      ulfius_set_string_body_response(response, 500, "Error deleting patient");
+    }
+  } else {
+    ulfius_set_string_body_response(response, 400, "Invalid ID");
+  }
+
+  return U_CALLBACK_CONTINUE;
+}
+
+
+// Doctors CRUD Callback Functions
+
+int callback_doctors_get(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+    Doctor doctor;
+    int result = read_doctor(id, &doctor);
+
+    if (result == 0) { // Doctor found
+        json_t *json_response = json_pack("{sisi}", "id", doctor.id, "name", doctor.name, "specialty", doctor.specialty);
+        ulfius_set_json_body_response(response, 200, json_response);
+        json_decref(json_response);
+    } else {
+        ulfius_set_string_body_response(response, 404, "Doctor not found");
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+int callback_doctors_post(const struct _u_request *request, struct _u_response *response, void *user_data) {
+    json_t *json_request = ulfius_get_json_body_request(request, NULL);
+    const char *name = json_string_value(json_object_get(json_request, "name"));
+    const char *specialty = json_string_value(json_object_get(json_request, "specialty"));
+
+    if (name && specialty) {
+        Doctor new_doctor = { .id = 0, .name = "", .specialty = "" };
+        strncpy(new_doctor.name, name, sizeof(new_doctor.name) - 1);
+        strncpy(new_doctor.specialty, specialty, sizeof(new_doctor.specialty) - 1);
+        int result = create_doctor(&new_doctor);
+
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 201, "Doctor created");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error creating doctor");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid data");
+    }
+
+    if (json_request) {
+        json_decref(json_request);
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+int callback_doctors_put(const struct _u_request *request, struct _u_response *response, void *user_data) {
+    json_t *json_request = ulfius_get_json_body_request(request, NULL);
+    int id = json_integer_value(json_object_get(json_request, "id"));
+    const char *name = json_string_value(json_object_get(json_request, "name"));
+    const char *specialty = json_string_value(json_object_get(json_request, "specialty"));
+
+    if (id > 0 && name && specialty) {
+        Doctor doctor = { .id = id, .name = "", .specialty = "" };
+        strncpy(doctor.name, name, sizeof(doctor.name) - 1);
+        strncpy(doctor.specialty, specialty, sizeof(doctor.specialty) - 1);
+        int result = update_doctor(&doctor);
+
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 200, "Doctor updated");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error updating doctor");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid data");
+    }
+
+    if (json_request) {
+        json_decref(json_request);
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+int callback_doctors_delete(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+
+    if (id > 0) {
+        int result = delete_doctor(id);
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 200, "Doctor deleted");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error deleting doctor");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid ID");
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+
+// Appointments CRUD Callback Functions
+// GET: Retrieve an Appointment
+int callback_appointments_get(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+    Appointment appointment;
+    int result = read_appointment(id, &appointment);
+
+    if (result == 0) { // Appointment found
+        json_t *json_response = json_pack("{sisisisi}", "id", appointment.id, "patient_id", appointment.patient_id, "doctor_id", appointment.doctor_id, "date", appointment.date);
+        ulfius_set_json_body_response(response, 200, json_response);
+        json_decref(json_response);
+    } else {
+        ulfius_set_string_body_response(response, 404, "Appointment not found");
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+// POST: Create an Appointment
+int callback_appointments_post(const struct _u_request *request, struct _u_response *response, void *user_data) {
+    json_t *json_request = ulfius_get_json_body_request(request, NULL);
+    int patient_id = json_integer_value(json_object_get(json_request, "patient_id"));
+    int doctor_id = json_integer_value(json_object_get(json_request, "doctor_id"));
+    const char *date = json_string_value(json_object_get(json_request, "date"));
+
+    if (patient_id > 0 && doctor_id > 0 && date) {
+        Appointment new_appointment = { .id = 0, .patient_id = patient_id, .doctor_id = doctor_id, .date = "" };
+        strncpy(new_appointment.date, date, sizeof(new_appointment.date) - 1);
+        int result = create_appointment(&new_appointment);
+
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 201, "Appointment created");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error creating appointment");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid data");
+    }
+
+    if (json_request) {
+        json_decref(json_request);
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+// PUT: Update an Appointment
+int callback_appointments_put(const struct _u_request *request, struct _u_response *response, void *user_data) {
+    json_t *json_request = ulfius_get_json_body_request(request, NULL);
+    int id = json_integer_value(json_object_get(json_request, "id"));
+    int patient_id = json_integer_value(json_object_get(json_request, "patient_id"));
+    int doctor_id = json_integer_value(json_object_get(json_request, "doctor_id"));
+    const char *date = json_string_value(json_object_get(json_request, "date"));
+
+    if (id > 0 && patient_id > 0 && doctor_id > 0 && date) {
+        Appointment appointment = { .id = id, .patient_id = patient_id, .doctor_id = doctor_id, .date = "" };
+        strncpy(appointment.date, date, sizeof(appointment.date) - 1);
+        int result = update_appointment(&appointment);
+
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 200, "Appointment updated");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error updating appointment");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid data");
+    }
+
+    if (json_request) {
+        json_decref(json_request);
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+// DELETE: Delete an Appointment
+int callback_appointments_delete(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+
+    if (id > 0) {
+        int result = delete_appointment(id);
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 200, "Appointment deleted");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error deleting appointment");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid ID");
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+
+// MedicalRecords CRUD Callback Functions
+// GET: Retrieve a Medical Record
+int callback_medical_records_get(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+    MedicalRecord record;
+    int result = read_medical_record(id, &record);
+
+    if (result == 0) { // Record found
+        json_t *json_response = json_pack("{sisis}", "id", record.id, "patient_id", record.patient_id, "details", record.details);
+        ulfius_set_json_body_response(response, 200, json_response);
+        json_decref(json_response);
+    } else {
+        ulfius_set_string_body_response(response, 404, "Medical record not found");
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+// POST: Create a Medical Record
+int callback_medical_records_post(const struct _u_request *request, struct _u_response *response, void *user_data) {
+    json_t *json_request = ulfius_get_json_body_request(request, NULL);
+    int patient_id = json_integer_value(json_object_get(json_request, "patient_id"));
+    const char *details = json_string_value(json_object_get(json_request, "details"));
+
+    if (patient_id > 0 && details) {
+        MedicalRecord new_record = { .id = 0, .patient_id = patient_id, .details = "" };
+        strncpy(new_record.details, details, sizeof(new_record.details) - 1);
+        int result = create_medical_record(&new_record);
+
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 201, "Medical record created");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error creating medical record");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid data");
+    }
+
+    if (json_request) {
+        json_decref(json_request);
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+// PUT: Update a Medical Record
+int callback_medical_records_put(const struct _u_request *request, struct _u_response *response, void *user_data) {
+    json_t *json_request = ulfius_get_json_body_request(request, NULL);
+    int id = json_integer_value(json_object_get(json_request, "id"));
+    int patient_id = json_integer_value(json_object_get(json_request, "patient_id"));
+    const char *details = json_string_value(json_object_get(json_request, "details"));
+
+    if (id > 0 && patient_id > 0 && details) {
+        MedicalRecord record = { .id = id, .patient_id = patient_id, .details = "" };
+        strncpy(record.details, details, sizeof(record.details) - 1);
+        int result = update_medical_record(&record);
+
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 200, "Medical record updated");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error updating medical record");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid data");
+    }
+
+    if (json_request) {
+        json_decref(json_request);
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+// DELETE: Delete a Medical Record
+int callback_medical_records_delete(const struct _u_request *request, struct _u_response *response, void *user_data) {
+  const char *id_str = u_map_get(request->map_url, "id");
+  int id = id_str ? atoi(id_str) : -1;
+
+    if (id > 0) {
+        int result = delete_medical_record(id);
+        if (result == 0) {
+            ulfius_set_string_body_response(response, 200, "Medical record deleted");
+        } else {
+            ulfius_set_string_body_response(response, 500, "Error deleting medical record");
+        }
+    } else {
+        ulfius_set_string_body_response(response, 400, "Invalid ID");
+    }
+
+    return U_CALLBACK_CONTINUE;
+}
+
+
+
 int main() {
-   if (init_db() != 0) {
-     return 1;
-   }
+  if (init_db() != 0) {
+    return 1;
+  }
 
-   struct MHD_Daemon *daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL, &request_handler, NULL, MHD_OPTION_END);
-   if (daemon == NULL) {
-     sqlite3_close(db);
-     return 1;
-   }
+  struct _u_instance instance;
 
-   printf("Server running on port %d\n", PORT);
-   getchar();
+  if (ulfius_init_instance(&instance, PORT, NULL, NULL) != U_OK) {
+    fprintf(stderr, "Error ulfius_init_instance, abort\n");
+    sqlite3_close(db);
+    return 1;
+  }
 
-   MHD_stop_daemon(daemon);
-   sqlite3_close(db);
-   return 0;
- }
+  // Patients endpoints
+  ulfius_add_endpoint_by_val(&instance, "GET", BASE_URL "/patients", NULL, 0, &callback_patients_get, NULL);
+  ulfius_add_endpoint_by_val(&instance, "POST", BASE_URL "/patients", NULL, 0, &callback_patients_post, NULL);
+  ulfius_add_endpoint_by_val(&instance, "PUT", BASE_URL "/patients", NULL, 0, &callback_patients_put, NULL);
+  ulfius_add_endpoint_by_val(&instance, "DELETE", BASE_URL "/patients", NULL, 0, &callback_patients_delete, NULL);
+
+  // Doctors endpoints
+  ulfius_add_endpoint_by_val(&instance, "GET", BASE_URL "/doctors", NULL, 0, &callback_doctors_get, NULL);
+  ulfius_add_endpoint_by_val(&instance, "POST", BASE_URL "/doctors", NULL, 0, &callback_doctors_post, NULL);
+  ulfius_add_endpoint_by_val(&instance, "PUT", BASE_URL "/doctors", NULL, 0, &callback_doctors_put, NULL);
+  ulfius_add_endpoint_by_val(&instance, "DELETE", BASE_URL "/doctors", NULL, 0, &callback_doctors_delete, NULL);
+
+  // Appointments endpoints
+  ulfius_add_endpoint_by_val(&instance, "GET", BASE_URL "/appointments", NULL, 0, &callback_appointments_get, NULL);
+  ulfius_add_endpoint_by_val(&instance, "POST", BASE_URL "/appointments", NULL, 0, &callback_appointments_post, NULL);
+  ulfius_add_endpoint_by_val(&instance, "PUT", BASE_URL "/appointments", NULL, 0, &callback_appointments_put, NULL);
+  ulfius_add_endpoint_by_val(&instance, "DELETE", BASE_URL "/appointments", NULL, 0, &callback_appointments_delete, NULL);
+
+  // Medical Records endpoints
+  ulfius_add_endpoint_by_val(&instance, "GET", BASE_URL "/medicalrecords", NULL, 0, &callback_medical_records_get, NULL);
+  ulfius_add_endpoint_by_val(&instance, "POST", BASE_URL "/medicalrecords", NULL, 0, &callback_medical_records_post, NULL);
+  ulfius_add_endpoint_by_val(&instance, "PUT", BASE_URL "/medicalrecords", NULL, 0, &callback_medical_records_put, NULL);
+  ulfius_add_endpoint_by_val(&instance, "DELETE", BASE_URL "/medicalrecords", NULL, 0, &callback_medical_records_delete, NULL);
+
+  if (ulfius_start_framework(&instance) == U_OK) {
+    printf("Server running on port %d\n", PORT);
+    getchar(); // Wait for user input to stop the server
+  } else {
+    fprintf(stderr, "Error starting framework\n");
+  }
+
+  ulfius_stop_framework(&instance);
+  ulfius_clean_instance(&instance);
+  sqlite3_close(db);
+  return 0;
+}
+
+
+
