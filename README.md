@@ -5,6 +5,8 @@
 ## Requirements 
 - sqlite3
 - libmircohttpd
+- jansson
+- ulfius
 
 ## Running the server
 
