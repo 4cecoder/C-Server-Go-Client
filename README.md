@@ -16,10 +16,13 @@
 
 ### Build & Run
 
-Go to http://localhost:8080/api and see if there is a response in browser
+### Check if running
+Go to `http://localhost:8080/api` and see if there is a response in browser
 
-There's a ps1 file for windows
+### Windows
+Run `docker-compose up -d`
 
+### Linux
 Theres a sh file for linux to run a build based on the cmake
 
 
