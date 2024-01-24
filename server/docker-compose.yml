@@ -6,11 +6,3 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
-    depends_on:
-      - db
-  db:
-    image: sqlite:latest
-    volumes:
-      - ./data:/data
-    environment:
-      - SQLITE_DATABASE=/data/health.db
