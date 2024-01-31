@@ -39,3 +39,4 @@ EXPOSE 8080
 
 # Set the entry point for your container
 CMD ["./main"]
+

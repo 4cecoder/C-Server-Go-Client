@@ -1,37 +1,62 @@
-cmake_minimum_required(VERSION 3.27)
-project(server C)
+cmake_minimum_required(VERSION 3.10)
+project(server)
 
-set(CMAKE_C_STANDARD 23)
+# Source files
+set(SOURCE_FILES main.c
+        database.c
+        patient_handlers.h
+        patient_handlers.c
+        cors.c
+        cors.h
+        json_response.h
+        json_response.c
+        doctors_handlers.h
+        doctors_handlers.c
+        appointments_handlers.h
+        appointments_handlers.c
+        medical_records_handlers.h
+        medical_records_handlers.c)
 
-# Find the packages for sqlite3
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SQLITE3 REQUIRED sqlite3)
-pkg_check_modules(MHD REQUIRED libmicrohttpd)
+# Include directories
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-if(WIN32)
-    # Specify paths for Windows SQLite3, if not in standard locations
-    include_directories(${PROJECT_SOURCE_DIR}/libs/windows/sqlite3)
-    link_directories(${PROJECT_SOURCE_DIR}/libs/windows/sqlite3)
-elseif(APPLE)
-    # Specify the paths for macOS Homebrew installation of Ulfius and its dependencies
-    include_directories(/opt/homebrew/include)
-    link_directories(/opt/homebrew/lib)
-endif()
+# Executable
+add_executable(server ${SOURCE_FILES})
 
-add_executable(server main.c)
-
-# Link the libraries to your executable
-target_include_directories(server PRIVATE ${SQLITE3_INCLUDE_DIRS})
-target_link_libraries(server ${SQLITE3_LIBRARIES})
-target_include_directories(server PRIVATE ${MHD_INCLUDE_DIRS})
-target_link_libraries(server ${MHD_LIBRARIES})
-
-# Link Ulfius and its dependencies
+# System-specific configurations
 if(APPLE)
-    target_link_libraries(server ulfius gnutls jansson)
+    # macOS-specific settings
+    include_directories(
+            /opt/homebrew/Cellar/ulfius/2.7.15/include
+            /opt/homebrew/Cellar/gnutls/3.8.3/include
+            /opt/homebrew/Cellar/jansson/2.14/include
+            /opt/homebrew/Cellar/libmicrohttpd/0.9.77/include
+            /opt/homebrew/Cellar/orcania/2.3.3/include
+            /opt/homebrew/Cellar/yder/1.4.20/include
+    )
+
+    # Libraries
+    set(ULFIUS_LIB /opt/homebrew/Cellar/ulfius/2.7.15/lib/libulfius.dylib)
+    set(GNUTLS_LIB /opt/homebrew/Cellar/gnutls/3.8.3/lib/libgnutls.dylib)
+    set(JANSSON_LIB /opt/homebrew/Cellar/jansson/2.14/lib/libjansson.dylib)
+    set(MICROHTTPD_LIB /opt/homebrew/Cellar/libmicrohttpd/0.9.77/lib/libmicrohttpd.dylib)
+    set(ORCANIA_LIB /opt/homebrew/Cellar/orcania/2.3.3/lib/liborcania.dylib)
+    set(YDER_LIB /opt/homebrew/Cellar/yder/1.4.20/lib/libyder.dylib)
+
+elseif(WIN32)
+    # Windows-specific settings
+elseif(UNIX AND NOT APPLE) # Linux
+    # Linux-specific settings
 endif()
 
-# For Windows, if additional libraries are needed, specify them here
-if(WIN32)
-    # Link additional Windows-specific libraries if necessary
-endif()
+# Link libraries
+target_link_libraries(server
+        ${ULFIUS_LIB}
+        ${MICROHTTPD_LIB}
+        ${JANSSON_LIB}
+        ${GNUTLS_LIB}
+        ${ORCANIA_LIB}
+        ${YDER_LIB}
+        sqlite3
+        curl
+)
