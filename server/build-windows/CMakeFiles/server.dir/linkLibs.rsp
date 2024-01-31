@@ -1,1 +1,0 @@
-  -L"/Users/fource/bytecats/C-Server-Go-Client/server/libs/windows/sqlite3"  -L"/Users/fource/bytecats/C-Server-Go-Client/server/libs/windows/libmicrohttpd-0.9.77-w32-bin/x86_64/MinGW/shared/mingw64/lib"  -lmicrohttpd -lsqlite3 -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 
