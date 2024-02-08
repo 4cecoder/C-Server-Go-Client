@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-
+sqlite3 *db;
 
 // Here you will define all your functions
 // For example:
@@ -88,14 +88,14 @@ int read_all_patients() {
   }
 
   printf("All Patients:\n");
+  json_t *json_response_obj = json_array(); // Create a new JSON array
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     const int id = sqlite3_column_int(stmt, 0);
     // Explicitly cast the result of sqlite3_column_text to const char*
     const char *name = (const char *)sqlite3_column_text(stmt, 1);
     // Use %s to correctly format the string in json_pack
-    json_array_append_new(json_response, json_pack("{sisi}", "id", id, "name", name));
+    json_array_append_new(json_response_obj, json_pack("{sisi}", "id", id, "name", name)); // Append to the new JSON array
   }
-
 
   sqlite3_finalize(stmt);
   return 0;
