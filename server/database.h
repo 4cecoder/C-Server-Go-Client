@@ -2,7 +2,7 @@
 #define DATABASE_H
 #include <sqlite3.h>
 
-sqlite3 *db;
+extern sqlite3 *db;
 
 
 
