@@ -1,6 +1,6 @@
 #include "patient_handlers.h"
 
-#include <database.h>
+#include "database.h"
 #include "cors.h"
 #include "json_response.h"
 #include <string.h>
@@ -69,36 +69,53 @@ int callback_patients_get(const struct _u_request *request, struct _u_response *
 }
 
 int callback_patients_post(const struct _u_request *request, struct _u_response *response, void *user_data) {
-  printf("Patients POST called\n");
-  json_t *json_request = ulfius_get_json_body_request(request, NULL);
-  const char *name = json_string_value(json_object_get(json_request, "name"));
+  printf("Patients POST called - Starting\n");
 
+  // Attempt to parse the JSON body of the request
+  json_t *json_request = ulfius_get_json_body_request(request, NULL);
+  if (!json_request) {
+    printf("Failed to parse JSON request body\n");
+    set_json_error_response(response, 400, "Bad Request: Unable to parse JSON body");
+    return U_CALLBACK_CONTINUE; // Early return if JSON parsing fails
+  }
+
+  // Attempt to retrieve the 'name' field from the JSON request
+  const char *name = json_string_value(json_object_get(json_request, "name"));
   if (name) {
-    printf("Creating patient: %s\n", name);
+    printf("Received patient name: %s\n", name);
+
+    // Prepare new patient struct and attempt to create the patient in the database
     Patient new_patient = { .id = 0, .name = "" };
     strncpy(new_patient.name, name, sizeof(new_patient.name) - 1);
+    new_patient.name[sizeof(new_patient.name) - 1] = '\0'; // Ensure null termination
+
+    printf("Attempting to create patient in database: %s\n", new_patient.name);
     const int result = create_patient(&new_patient);
 
     if (result == 0) {
-      printf("Patient created successfully\n");
-      json_t *success_json = json_pack("{ss}", "message", "Patient created");
+      printf("Patient created successfully in database: %s\n", new_patient.name);
+      json_t *success_json = json_pack("{ss}", "message", "Patient created successfully");
       ulfius_set_json_body_response(response, 201, success_json);
       json_decref(success_json);
     } else {
-      printf("Error creating patient\n");
-      set_json_error_response(response, 500, "Error creating patient");
+      printf("Database operation failed: Error creating patient: %s\n", new_patient.name);
+      set_json_error_response(response, 500, "Internal Server Error: Failed to create patient");
     }
   } else {
-    printf("Invalid patient data\n");
-    set_json_error_response(response, 400, "Invalid data");
+    printf("Invalid or missing 'name' field in patient data\n");
+    set_json_error_response(response, 400, "Invalid Data: Missing 'name' field");
   }
 
+  // Cleanup
   if (json_request) {
     json_decref(json_request);
   }
   set_cors_headers(response);
+
+  printf("Patients POST called - Ending\n");
   return U_CALLBACK_CONTINUE;
 }
+
 
 
 int callback_patients_put(const struct _u_request *request, struct _u_response *response, void *user_data) {
